@@ -1,0 +1,10 @@
+[package]
+name = "accelerate"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+evdev-rs = "0.6.1"
+
+[profile.release]
+#debug = true # for benchmarking
