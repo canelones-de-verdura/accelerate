@@ -19,31 +19,39 @@ fn time_diff(a: &TimeVal, b: &TimeVal) -> TimeVal {
 //#[inline(always)]
 fn process_event(event: &mut InputEvent, time: &TimeVal) {
     assert!(event.is_type(&EventType::EV_REL));
-    if time.tv_sec == 0 {
-        if time.tv_usec == 0 {
-            println!("To close!");
-            return;
-        }
-
-        let vel = (event.value as f64 / time.tv_usec as f64 * 1_000_000.).abs();
-        // println!("VEL {vel}");
-
-        let mut mult = 1. + vel * ACCEL_SENS;
-        mult = if mult > ACCEL_CAP { ACCEL_CAP } else { mult };
-
-        // println!("{mult}");
-
-        // println!("OG {}", event.value);
-        let newval = event.value as f64 * mult;
-        // println!("ACCEL {newval}");
-        event.value = newval.round() as i32;
-        // println!("ROUNDED {}", event.value);
-        // println!("{},{}", vel, mult);
+    if time.tv_sec == 0 && time.tv_usec == 0 {
+        println!("To close!");
+        return;
     }
+
+    // supuestamente, sería units/segundo
+    let vel =
+        (event.value as f64 / (time.tv_sec as f64 + (time.tv_usec as f64 / 1_000_000f64))).abs();
+    let mut multiplier = 1. + vel * ACCEL_SENS;
+    multiplier = if multiplier > ACCEL_CAP {
+        ACCEL_CAP
+    } else {
+        multiplier
+    };
+
+    event.value = (event.value as f64 * multiplier).round() as i32;
+    println!("{vel}, {multiplier}");
 }
 
 fn main() {
-    let fd = File::open("/dev/input/event16").unwrap();
+    // entiendo que por default /dev/input/event5 es el mouse
+    let mut event_num = 5;
+    let mut args = std::env::args();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--device" | "-d" => {
+                event_num = args.next().unwrap().parse().unwrap();
+            }
+            _ => {}
+        }
+    }
+
+    let fd = File::open(format!("/dev/input/event{event_num}")).unwrap();
     let mut mouse = Device::new_from_file(fd).unwrap();
     mouse.grab(evdev_rs::GrabMode::Grab).unwrap();
 
@@ -60,8 +68,7 @@ fn main() {
     loop {
         // "unwrap" bc there is no way this throws an error in blocking mode
         event = mouse.next_event(ReadFlag::BLOCKING).unwrap().1;
-        // println!("{:?}", event.1);
-        // virt.write_event(&event.1).unwrap();
+        // println!("{:?}", event);
         match event.event_code {
             EventCode::EV_REL(REL_X) | EventCode::EV_REL(REL_Y) => {
                 let delta = time_diff(&event.time, &last_time);
