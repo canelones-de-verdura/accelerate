@@ -5,8 +5,10 @@ use evdev_rs::enums::EV_SYN::{SYN_DROPPED, SYN_REPORT};
 use evdev_rs::enums::{EventCode, EventType};
 use evdev_rs::{Device, InputEvent, ReadFlag, TimeVal, UInputDevice};
 
-const ACCEL_SENS: f64 = 0.0005;
-const ACCEL_CAP: f64 = 3.0;
+const ACCEL_VALUE: f64 = 0.1;
+const ACCEL_POW: f64 = 2.0;
+const MOUSE_SENS: f64 = 0.5;
+const MOUSE_SENS_CAP: f64 = 1.5;
 
 //#[inline(always)]
 fn time_diff(a: &TimeVal, b: &TimeVal) -> TimeVal {
@@ -24,18 +26,22 @@ fn process_event(event: &mut InputEvent, time: &TimeVal) {
         return;
     }
 
-    // supuestamente, sería units/segundo
-    let vel =
-        (event.value as f64 / (time.tv_sec as f64 + (time.tv_usec as f64 / 1_000_000f64))).abs();
-    let mut multiplier = 1. + vel * ACCEL_SENS;
-    multiplier = if multiplier > ACCEL_CAP {
-        ACCEL_CAP
+    // supuestamente, sería units/ms
+    let vel = (event.value as f64
+        / (time.tv_sec as f64 * 1_000f64 + (time.tv_usec as f64 / 1_000f64)))
+        .abs();
+    // (event.value as f64 / (time.tv_sec as f64 + (time.tv_usec as f64 / 1_000_000f64))).abs();
+    let mut accel_sens = MOUSE_SENS + vel.powf(ACCEL_POW - 1.) * ACCEL_VALUE;
+    accel_sens = if accel_sens > MOUSE_SENS_CAP {
+        MOUSE_SENS_CAP
     } else {
-        multiplier
+        accel_sens
     };
 
-    event.value = (event.value as f64 * multiplier).round() as i32;
-    println!("{vel}, {multiplier}");
+    // multiplier = if vel <= 750. { 1.0 } else { multiplier };
+
+    event.value = (event.value as f64 * accel_sens).round() as i32;
+    // println!("{vel}, {multiplier}");
 }
 
 fn main() {
