@@ -5,43 +5,33 @@ use evdev_rs::enums::EV_SYN::{SYN_DROPPED, SYN_REPORT};
 use evdev_rs::enums::{EventCode, EventType};
 use evdev_rs::{Device, InputEvent, ReadFlag, TimeVal, UInputDevice};
 
-const ACCEL_VALUE: f64 = 0.1;
+const ACCEL_VALUE: f64 = 0.02;
 const ACCEL_POW: f64 = 2.0;
-const MOUSE_SENS: f64 = 0.5;
+const MOUSE_SENS: f64 = 0.75;
 const MOUSE_SENS_CAP: f64 = 1.5;
 
 //#[inline(always)]
-fn time_diff(a: &TimeVal, b: &TimeVal) -> TimeVal {
-    TimeVal {
+fn time_diff(a: &TimeVal, b: &TimeVal) -> f64 {
+    let time = TimeVal {
         tv_sec: (a.tv_sec - b.tv_sec).abs(),
         tv_usec: (a.tv_usec - b.tv_usec).abs(),
-    }
+    };
+    time.tv_sec as f64 * 1_000f64 + (time.tv_usec as f64 / 1_000f64)
 }
 
 //#[inline(always)]
-fn process_event(event: &mut InputEvent, time: &TimeVal) {
+fn process_event(event: &mut InputEvent, time_delta: f64) {
     assert!(event.is_type(&EventType::EV_REL));
-    if time.tv_sec == 0 && time.tv_usec == 0 {
+    if time_delta == 0. {
         println!("To close!");
         return;
     }
 
-    // supuestamente, sería units/ms
-    let vel = (event.value as f64
-        / (time.tv_sec as f64 * 1_000f64 + (time.tv_usec as f64 / 1_000f64)))
-        .abs();
-    // (event.value as f64 / (time.tv_sec as f64 + (time.tv_usec as f64 / 1_000_000f64))).abs();
-    let mut accel_sens = MOUSE_SENS + vel.powf(ACCEL_POW - 1.) * ACCEL_VALUE;
-    accel_sens = if accel_sens > MOUSE_SENS_CAP {
-        MOUSE_SENS_CAP
-    } else {
-        accel_sens
-    };
-
-    // multiplier = if vel <= 750. { 1.0 } else { multiplier };
+    let vel = (event.value as f64 / time_delta).abs();
+    let accel_sens = (MOUSE_SENS + (vel * ACCEL_VALUE).powf(ACCEL_POW - 1.)).min(MOUSE_SENS_CAP);
 
     event.value = (event.value as f64 * accel_sens).round() as i32;
-    // println!("{vel}, {multiplier}");
+    // println!("{vel}, {accel_sens}");
 }
 
 fn main() {
@@ -78,7 +68,7 @@ fn main() {
         match event.event_code {
             EventCode::EV_REL(REL_X) | EventCode::EV_REL(REL_Y) => {
                 let delta = time_diff(&event.time, &last_time);
-                process_event(&mut event, &delta);
+                process_event(&mut event, delta);
             }
             EventCode::EV_SYN(SYN_REPORT) => {
                 last_time = event.time.clone();
