@@ -9,8 +9,17 @@ use evdev_rs::{Device, InputEvent, ReadFlag, TimeVal, UInputDevice};
 
 const ACCEL_VALUE: f64 = 0.02;
 const ACCEL_POW: f64 = 2.0;
-const MOUSE_SENS: f64 = 0.75;
+const MOUSE_SENS: f64 = 0.5;
 const MOUSE_SENS_CAP: f64 = 1.5;
+
+struct MouseMove{
+    dx: i32,
+    dy: i32,
+    time_diff: f64
+}
+
+impl MouseMove{
+}
 
 const SOCKET_PATH: &str = "/run/accel.socket";
 
@@ -27,6 +36,8 @@ fn process_event(event: &mut InputEvent, time_delta: f64) {
         println!("To close!");
     }
 
+    // esto está mal, tendría que ser sqrt(dx*dx + dy*dy) / time_delta
+    // pero evdev recibe de a un evento el hijo de puta
     let vel = (event.value as f64 / time_delta).abs();
     let accel_sens = (MOUSE_SENS + (vel * ACCEL_VALUE).powf(ACCEL_POW - 1.)).min(MOUSE_SENS_CAP);
 
