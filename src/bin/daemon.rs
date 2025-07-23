@@ -9,7 +9,7 @@ use evdev_rs::{Device, InputEvent, ReadFlag, TimeVal, UInputDevice};
 
 const ACCEL_VALUE: f64 = 0.02;
 const ACCEL_POW: f64 = 2.0;
-const MOUSE_SENS: f64 = 0.5;
+const MOUSE_SENS: f64 = 0.75;
 const MOUSE_SENS_CAP: f64 = 1.5;
 
 struct MouseMove {
@@ -69,7 +69,7 @@ fn main() {
         tv_usec: 0,
     };
 
-    let mut events = Vec::with_capacity(3);
+    let mut events = Vec::with_capacity(2);
     loop {
         // primero leemos del socket
         match unix_listener.accept() {
@@ -86,33 +86,17 @@ fn main() {
         match event.event_code {
             EventCode::EV_REL(REL_X | REL_Y) => {
                 events.push(event.clone());
-                event = mouse.next_event(ReadFlag::BLOCKING).unwrap().1;
-                match event.event_code {
-                    EventCode::EV_REL(REL_X | REL_Y) => {
-                        events.push(event.clone());
-                        event = mouse.next_event(ReadFlag::BLOCKING).unwrap().1;
-                        match event.event_code {
-                            EventCode::EV_SYN(SYN_REPORT) => {
-                                events.push(event.clone());
-                            }
-                            _ => {
-                                virt.write_event(&event).unwrap();
-                            }
-                        }
-                    }
-                    EventCode::EV_SYN(SYN_REPORT) => {
-                        events.push(event.clone());
-                    }
-                    _ => {
-                        virt.write_event(&event).unwrap();
-                    }
-                }
+            }
 
-                for event in &events {
+            EventCode::EV_SYN(SYN_REPORT) => {
+                for event in &mut events {
+                    process_event(event, time_diff(&event.time, &last_time));
                     virt.write_event(&event).unwrap();
                 }
 
+                virt.write_event(&event).unwrap();
                 events.clear();
+                last_time = event.time;
             }
 
             EventCode::EV_SYN(SYN_DROPPED) => {
