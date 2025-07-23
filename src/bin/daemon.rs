@@ -12,14 +12,13 @@ const ACCEL_POW: f64 = 2.0;
 const MOUSE_SENS: f64 = 0.5;
 const MOUSE_SENS_CAP: f64 = 1.5;
 
-struct MouseMove{
+struct MouseMove {
     dx: i32,
     dy: i32,
-    time_diff: f64
+    time_diff: f64,
 }
 
-impl MouseMove{
-}
+impl MouseMove {}
 
 const SOCKET_PATH: &str = "/run/accel.socket";
 
@@ -30,6 +29,7 @@ fn time_diff(a: &TimeVal, b: &TimeVal) -> f64 {
     (a - b).abs() as f64 / 1_000f64
 }
 
+struct Events(InputEvent, InputEvent, InputEvent);
 fn process_event(event: &mut InputEvent, time_delta: f64) {
     assert!(event.is_type(&EventType::EV_REL));
     if time_delta == 0. {
@@ -69,6 +69,7 @@ fn main() {
         tv_usec: 0,
     };
 
+    let mut events = Vec::with_capacity(3);
     loop {
         // primero leemos del socket
         match unix_listener.accept() {
@@ -84,18 +85,43 @@ fn main() {
         event = mouse.next_event(ReadFlag::BLOCKING).unwrap().1;
         match event.event_code {
             EventCode::EV_REL(REL_X | REL_Y) => {
-                let delta = time_diff(&event.time, &last_time);
-                process_event(&mut event, delta);
+                events.push(event.clone());
+                event = mouse.next_event(ReadFlag::BLOCKING).unwrap().1;
+                match event.event_code {
+                    EventCode::EV_REL(REL_X | REL_Y) => {
+                        events.push(event.clone());
+                        event = mouse.next_event(ReadFlag::BLOCKING).unwrap().1;
+                        match event.event_code {
+                            EventCode::EV_SYN(SYN_REPORT) => {
+                                events.push(event.clone());
+                            }
+                            _ => {
+                                virt.write_event(&event).unwrap();
+                            }
+                        }
+                    }
+                    EventCode::EV_SYN(SYN_REPORT) => {
+                        events.push(event.clone());
+                    }
+                    _ => {
+                        virt.write_event(&event).unwrap();
+                    }
+                }
+
+                for event in &events {
+                    virt.write_event(&event).unwrap();
+                }
+
+                events.clear();
             }
-            EventCode::EV_SYN(SYN_REPORT) => {
-                last_time = event.time;
-            }
+
             EventCode::EV_SYN(SYN_DROPPED) => {
                 panic!(" --- DROPPED DROPPED DROPPED --- ")
             }
-            _ => {}
-        }
 
-        virt.write_event(&event).unwrap();
+            _ => {
+                virt.write_event(&event).unwrap();
+            }
+        }
     }
 }
