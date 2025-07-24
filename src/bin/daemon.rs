@@ -12,14 +12,6 @@ const ACCEL_POW: f64 = 2.0;
 const MOUSE_SENS: f64 = 0.75;
 const MOUSE_SENS_CAP: f64 = 1.5;
 
-struct MouseMove {
-    dx: i32,
-    dy: i32,
-    time_diff: f64,
-}
-
-impl MouseMove {}
-
 const SOCKET_PATH: &str = "/run/accel.socket";
 
 fn time_diff(a: &TimeVal, b: &TimeVal) -> f64 {
@@ -29,19 +21,21 @@ fn time_diff(a: &TimeVal, b: &TimeVal) -> f64 {
     (a - b).abs() as f64 / 1_000f64
 }
 
-struct Events(InputEvent, InputEvent, InputEvent);
-fn process_event(event: &mut InputEvent, time_delta: f64) {
-    assert!(event.is_type(&EventType::EV_REL));
+fn apply_accel(event_values: &mut (i32, i32), time_delta: f64) -> (f64, f64) {
     if time_delta == 0. {
         println!("To close!");
     }
 
-    // esto está mal, tendría que ser sqrt(dx*dx + dy*dy) / time_delta
-    // pero evdev recibe de a un evento el hijo de puta
-    let vel = (event.value as f64 / time_delta).abs();
+    let (d1, d2) = event_values.clone();
+    let vel = (f64::from(d1 * d1 + d2 * d2).sqrt() / time_delta).abs();
     let accel_sens = (MOUSE_SENS + (vel * ACCEL_VALUE).powf(ACCEL_POW - 1.)).min(MOUSE_SENS_CAP);
 
-    event.value = (event.value as f64 * accel_sens).round() as i32;
+    *event_values = (
+        (d1 as f64 * accel_sens).round() as i32,
+        (d2 as f64 * accel_sens).round() as i32,
+    );
+
+    return (vel, accel_sens);
 }
 
 fn main() {
@@ -85,13 +79,36 @@ fn main() {
         event = mouse.next_event(ReadFlag::BLOCKING).unwrap().1;
         match event.event_code {
             EventCode::EV_REL(REL_X | REL_Y) => {
-                events.push(event.clone());
+                events.push(event);
             }
 
             EventCode::EV_SYN(SYN_REPORT) => {
-                for event in &mut events {
-                    process_event(event, time_diff(&event.time, &last_time));
+                // we cant know if events are (dx, dy) or (dy, dx) or if they are at all.
+                // and we can't change the order (i.e. recieve (dy, dx) and write (dx, dy)), 
+                // because mouse movement get's fucked
+                // doesn't matter really, besides not being able to modify both axis independently
+                // and having to do some extra checks
+
+                if events.is_empty() {
                     virt.write_event(&event).unwrap();
+                    continue;
+                }
+
+                let mut values = (
+                    events.get(0).map(|ev| ev.value).unwrap_or(0),
+                    events.get(1).map(|ev| ev.value).unwrap_or(0),
+                );
+
+                let _stats = apply_accel(&mut values, time_diff(&event.time, &last_time));
+
+                if let Some(e0) = events.get_mut(0) {
+                    e0.value = values.0;
+                    virt.write_event(&e0).unwrap();
+                }
+
+                if let Some(e1) = events.get_mut(1) {
+                    e1.value = values.1;
+                    virt.write_event(&e1).unwrap();
                 }
 
                 virt.write_event(&event).unwrap();
