@@ -26,13 +26,13 @@ fn apply_accel(event_values: &mut (i32, i32), time_delta: f64) -> (f64, f64) {
         println!("To close!");
     }
 
-    let (d1, d2) = event_values.clone();
-    let vel = (f64::from(d1 * d1 + d2 * d2).sqrt() / time_delta).abs();
+    let (dx, dy) = event_values.clone();
+    let vel = (f64::from(dx * dx + dy * dy).sqrt() / time_delta).abs();
     let accel_sens = (MOUSE_SENS + (vel * ACCEL_VALUE).powf(ACCEL_POW - 1.)).min(MOUSE_SENS_CAP);
 
     *event_values = (
-        (d1 as f64 * accel_sens).round() as i32,
-        (d2 as f64 * accel_sens).round() as i32,
+        (dx as f64 * accel_sens).round() as i32,
+        (dy as f64 * accel_sens).round() as i32,
     );
 
     return (vel, accel_sens);
@@ -84,31 +84,76 @@ fn main() {
 
             EventCode::EV_SYN(SYN_REPORT) => {
                 // we cant know if events are (dx, dy) or (dy, dx) or if they are at all.
-                // and we can't change the order (i.e. recieve (dy, dx) and write (dx, dy)), 
+                // and we can't change the order (i.e. recieve (dy, dx) and write (dx, dy)),
                 // because mouse movement get's fucked
                 // doesn't matter really, besides not being able to modify both axis independently
                 // and having to do some extra checks
 
+                // early return
                 if events.is_empty() {
                     virt.write_event(&event).unwrap();
                     continue;
                 }
 
+                // select events and modify
+                let x_index = events
+                    .iter_mut()
+                    .position(|ev| ev.event_code == EventCode::EV_REL(REL_X));
+
+                let y_index = events
+                    .iter_mut()
+                    .position(|ev| ev.event_code == EventCode::EV_REL(REL_Y));
+
                 let mut values = (
-                    events.get(0).map(|ev| ev.value).unwrap_or(0),
-                    events.get(1).map(|ev| ev.value).unwrap_or(0),
+                    x_index.map(|i| events[i].value).unwrap_or(0),
+                    y_index.map(|i| events[i].value).unwrap_or(0),
                 );
 
                 let _stats = apply_accel(&mut values, time_diff(&event.time, &last_time));
 
-                if let Some(e0) = events.get_mut(0) {
-                    e0.value = values.0;
-                    virt.write_event(&e0).unwrap();
+                if let Some(i) = x_index {
+                    events[i].value = values.0;
                 }
+                if let Some(i) = y_index {
+                    events[i].value = values.1;
+                }
+                // let mut values = (
+                //     events
+                //         .iter()
+                //         .find(|ev| ev.event_code == EventCode::EV_REL(REL_X))
+                //         .map(|ev| ev.value)
+                //         .unwrap_or(0),
+                //     events
+                //         .iter()
+                //         .find(|ev| ev.event_code == EventCode::EV_REL(REL_Y))
+                //         .map(|ev| ev.value)
+                //         .unwrap_or(0),
+                //     // events.get(0).map(|ev| ev.value).unwrap_or(0),
+                //     // events.get(1).map(|ev| ev.value).unwrap_or(0),
+                // );
+                //
+                // let _stats = apply_accel(&mut values, time_diff(&event.time, &last_time));
+                //
+                // if let Some(e0) = events.get_mut(0) {
+                //     if e0.event_code == EventCode::EV_REL(REL_X) {
+                //         e0.value = values.0;
+                //     } else {
+                //         e0.value = values.1;
+                //     }
+                //     virt.write_event(&e0).unwrap();
+                // }
+                //
+                // if let Some(e1) = events.get_mut(1) {
+                //     if e1.event_code == EventCode::EV_REL(REL_X) {
+                //         e1.value = values.0;
+                //     } else {
+                //         e1.value = values.1;
+                //     }
+                //     virt.write_event(&e1).unwrap();
+                // }
 
-                if let Some(e1) = events.get_mut(1) {
-                    e1.value = values.1;
-                    virt.write_event(&e1).unwrap();
+                for event in &events {
+                    virt.write_event(event).unwrap();
                 }
 
                 virt.write_event(&event).unwrap();
