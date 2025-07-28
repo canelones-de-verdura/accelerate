@@ -83,11 +83,10 @@ fn main() {
             }
 
             EventCode::EV_SYN(SYN_REPORT) => {
-                // we cant know if events are (dx, dy) or (dy, dx) or if they are at all.
+                // at first, we cant know if events are (dx, dy) or (dy, dx) or if they are at all.
                 // and we can't change the order (i.e. recieve (dy, dx) and write (dx, dy)),
-                // because mouse movement get's fucked
-                // doesn't matter really, besides not being able to modify both axis independently
-                // and having to do some extra checks
+                // because mouse movement get's fucked.
+                // doesn't matter really, besides having to do some extra checks.
 
                 // early return
                 if events.is_empty() {
@@ -117,41 +116,8 @@ fn main() {
                 if let Some(i) = y_index {
                     events[i].value = values.1;
                 }
-                // let mut values = (
-                //     events
-                //         .iter()
-                //         .find(|ev| ev.event_code == EventCode::EV_REL(REL_X))
-                //         .map(|ev| ev.value)
-                //         .unwrap_or(0),
-                //     events
-                //         .iter()
-                //         .find(|ev| ev.event_code == EventCode::EV_REL(REL_Y))
-                //         .map(|ev| ev.value)
-                //         .unwrap_or(0),
-                //     // events.get(0).map(|ev| ev.value).unwrap_or(0),
-                //     // events.get(1).map(|ev| ev.value).unwrap_or(0),
-                // );
-                //
-                // let _stats = apply_accel(&mut values, time_diff(&event.time, &last_time));
-                //
-                // if let Some(e0) = events.get_mut(0) {
-                //     if e0.event_code == EventCode::EV_REL(REL_X) {
-                //         e0.value = values.0;
-                //     } else {
-                //         e0.value = values.1;
-                //     }
-                //     virt.write_event(&e0).unwrap();
-                // }
-                //
-                // if let Some(e1) = events.get_mut(1) {
-                //     if e1.event_code == EventCode::EV_REL(REL_X) {
-                //         e1.value = values.0;
-                //     } else {
-                //         e1.value = values.1;
-                //     }
-                //     virt.write_event(&e1).unwrap();
-                // }
 
+                // write
                 for event in &events {
                     virt.write_event(event).unwrap();
                 }
